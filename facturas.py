@@ -14,47 +14,53 @@ import config
 
 OP_ALTA = "Alta"
 OP_BAJA = "Baja"
-
+FECHA_FORMATO = "%d/%m/%Y" 
 CSV_DIR = os.path.join(config.DIR_BD, "bd.csv")
 CSV_CABECERA = [ "FechaReg", "HoraReg","OpReg", "Documento", "FechaFac", "NumFac", "IdSoftware",
       "FechaFacPrev", "NumFacPrev", "HashPrev", "Hash", "Firma" ]
 
-def creaBD():
+def crea_db():
    os.makedirs(config.DIR_BD, exist_ok=True)
    with open(CSV_DIR, "w", newline="") as fich:
       writer = csv.DictWriter(fich, fieldnames=CSV_CABECERA)
       writer.writeheader()
 
-def listaRegistros(verifica = False, crear_si_no_existe = True):
-   if not os.path.isdir(config.DIR_BD) or not os.path.isfile(CSV_DIR):
-      if crear_si_no_existe:
-         creaBD()
-         return []
-      else:
-         return None
+def lista_registros(verifica=False, crear_si_no_existe=True):
+    if not os.path.isdir(config.DIR_BD) or not os.path.isfile(CSV_DIR):
+        if crear_si_no_existe:
+            crea_bd()
+            return []
+        return None
 
-   regs = []
-   prev_reg = None
-   with open(CSV_DIR, "r", newline="") as fich:
-      reader = csv.DictReader(fich)
-      for reg in reader:
-         regs.append(reg)
-         
-         if verifica:
-            if prev_reg is not None:
-               if reg["FechaFacPrev"] != prev_reg["FechaFac"] or reg["NumFacPrev"] != prev_reg["NumFac"] \
-                     or reg["HashPrev"] != prev_reg["Hash"]:
-                  print("ERROR: Cadena invalida en registro del " + reg["FechaReg"] + " a las " + reg["HoraReg"] + ".")
-            hash_bin = calcHash(reg)
-            if reg["Hash"] != hash_bin.hex().upper():
-               print("ERROR: Hash invalido en registro del " + reg["FechaReg"] + " a las " + reg["HoraReg"] + ".")
-            elif not verificaFirma(bytes.fromhex(reg["Firma"]), hash_bin):
-               print("ERROR: Firma electrónica invalida en el registro del " + reg["FechaReg"] + " a las " + reg["HoraReg"] + ".")
+    regs = []
+    prev_reg = None
+    with open(CSV_DIR, "r", newline="") as fich:
+        reader = csv.DictReader(fich)
+        for reg in reader:
+            regs.append(reg)
+            if verifica:
+                validar_registro(prev_reg, reg)
             prev_reg = reg
 
-   return regs
+    return regs
+ 
 
-def listaFacturas(verifica = False, crear_si_no_existe = True):
+def validar_registro(prev_reg, reg):
+   if prev_reg is not None and (
+    reg["FechaFacPrev"] != prev_reg["FechaFac"] or
+    reg["NumFacPrev"] != prev_reg["NumFac"] or
+    reg["HashPrev"] != prev_reg["Hash"]
+   ):
+    
+   print(f"ERROR: Cadena inválida en registro del {reg['FechaReg']} a las {reg['HoraReg']}.")
+
+    hash_bin = calc_hash(reg)
+    if reg["Hash"] != hash_bin.hex().upper():
+        print(f"ERROR: Hash inválido en registro del {reg['FechaReg']} a las {reg['HoraReg']}.")
+    elif not verifica_firma(bytes.fromhex(reg["Firma"]), hash_bin):
+        print(f"ERROR: Firma electrónica inválida en el registro del {reg['FechaReg']} a las {reg['HoraReg']}.")
+
+def lista_facturas(verifica = False, crear_si_no_existe = True):
    regs = listaRegistros(verifica, crear_si_no_existe)
    if regs is None or len(regs) == 0:
       return regs
@@ -100,12 +106,12 @@ def listaFacturas(verifica = False, crear_si_no_existe = True):
          print("ERROR: Operación de entrada del " + reg["FechaReg"] + " a las " + reg["HoraReg"] + " no soportada.")
    
    def ordena_por_fecha(fac):
-      return time.strptime(fac["Fecha"], "%d/%m/%Y")
+      return time.strptime(fac["Fecha"], FECHA_FORMATO)
    facs.sort(key=ordena_por_fecha)
    
    return facs
 
-def calcHash(reg, doc_ruta = None):
+def calc_hash(reg, doc_ruta = None):
    if doc_ruta is None:
       doc_ruta = os.path.join(config.DIR_BD, reg["Documento"])
    with open(doc_ruta, mode = "rb") as file:
@@ -124,14 +130,14 @@ def calcHash(reg, doc_ruta = None):
    hasher.update(reg["HashPrev"].encode("UTF-8"))
    return hasher.finalize()
 
-def calcFirma(hash_bin):
+def calc_firma(hash_bin):
    curva = ec.SECP256R1()
    ec_priv = ec.derive_private_key(int(config.CLAVE_FIRMA, 0), curva, default_backend())	
    firma_der = ec_priv.sign(hash_bin, ec.ECDSA(utils.Prehashed(hashes.SHA256())))
    firma_dec = utils.decode_dss_signature(firma_der)
    return firma_dec[0].to_bytes(32, "big") + firma_dec[1].to_bytes(32, "big")
 
-def verificaFirma(firma_bin, hash_bin):
+def verifica_firma(firma_bin, hash_bin):
    curva = ec.SECP256R1()
    ec_priv = ec.derive_private_key(int(config.CLAVE_FIRMA, 0), curva, default_backend())	
    ec_pub = ec_priv.public_key()
@@ -142,15 +148,15 @@ def verificaFirma(firma_bin, hash_bin):
       return False
    return True
 
-def creaRegistro(op, doc_ruta, fac_fecha, fac_num, copiar_doc=True):
+def crea_registro(op, doc_ruta, fac_fecha, fac_num, copiar_doc=True):
    # Crear campos del registro
    reg = {}
    fecha_reg = time.localtime()
-   reg["FechaReg"] = time.strftime("%d/%m/%Y", fecha_reg)
+   reg["FechaReg"] = time.strftime(FECHA_FORMATO, fecha_reg)
    reg["HoraReg"] = time.strftime("%H:%M:%S", fecha_reg)
    reg["OpReg"] = op
    if copiar_doc:
-      fac_fecha_struc = time.strptime(fac_fecha, "%d/%m/%Y")
+      fac_fecha_struc = time.strptime(fac_fecha, FECHA_FORMATO)
       doc_nombre = time.strftime("%Y.%m.%d", fac_fecha_struc) + " " + re.sub(r"\W", "_", fac_num) \
             + " " + time.strftime("%Y%m%d%H%M%S", fecha_reg) + os.path.splitext(doc_ruta)[1]
       reg["Documento"] = doc_nombre

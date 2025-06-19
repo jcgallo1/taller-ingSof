@@ -7,7 +7,7 @@ import facturas
 import config
 import os.path
 
-from config import *
+from config import DB_PATH
 
 # Argumentos de entrada
 fac_num = input("Introduce el número de factura: ")

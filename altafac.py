@@ -7,6 +7,8 @@ import time
 import os.path
 import facturas
 
+FECHA_FORMATO = "%d/%m/%Y"
+
 # Argumentos de entrada
 if len(sys.argv) == 2:
    doc_ruta = sys.argv[1]
@@ -21,19 +23,19 @@ fac_num = input("Introduce el número de factura: ")
 if fac_num == "":
    sys.exit("Número de factura requerido.")
    
-fac_fecha_def = time.strftime("%d/%m/%Y")
+fac_fecha_def = time.strftime(FECHA_FORMATO)
 fac_fecha = input("Fecha de expedición de la factura [" + fac_fecha_def + "]: ")
 if fac_fecha == "":
    fac_fecha = fac_fecha_def
 else:
    try:
-      fecha = time.strptime(fac_fecha, "%d/%m/%Y")
+      fecha = time.strptime(fac_fecha, FECHA_FORMATO)
    except ValueError:
       try:
-         fecha = time.strptime(fac_fecha, "%d/%m/%y")
+         fecha = time.strptime(fac_fecha, FECHA_FORMATO)
       except ValueError:
          sys.exit("Formato de fecha no reconocido.")
-   fac_fecha = time.strftime("%d/%m/%Y", fecha)
+   fac_fecha = time.strftime(FECHA_FORMATO, fecha)
 
 # Crear entrada en la base de datos
 facturas.creaRegistro(facturas.OP_ALTA, doc_ruta, fac_fecha, fac_num)
